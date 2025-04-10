@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fit Zone Gym Manager</title>
+  <style>
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+    margin: 0;
+    padding: 20px 10px;
+    color: #fff;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 1.8em;
+    margin-bottom: 25px;
+    font-weight: 600;
+    background: linear-gradient(45deg, #00ffe7, #007bff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .form, .search {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 20px;
+    max-width: 95%;
+    margin: 15px auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+
+  input, button, select {
+    width: 100%;
+    padding: 12px 15px;
+    margin: 10px 0;
+    font-size: 1em;
+    border-radius: 10px;
+    border: none;
+    outline: none;
+  }
+
+  input, select {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  input::placeholder {
+    color: #ccc;
+  }
+
+  button {
+    background: linear-gradient(to right, #00f2fe, #4facfe);
+    color: #000;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  button:hover {
+    background: linear-gradient(to right, #43e97b, #38f9d7);
+    transform: translateY(-1px);
+  }
+
+  .member-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(6px);
+    border-radius: 15px;
+    margin: 15px auto;
+    padding: 15px 20px;
+    max-width: 95%;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    position: relative;
+    transition: 0.3s;
+  }
+
+  .member-card:hover {
+    transform: scale(1.01);
+  }
+
+  .pending {
+    border-left: 5px solid #ff1744;
+  }
+
+  .status {
+    font-weight: 600;
+    display: inline-block;
+    margin-top: 5px;
+  }
+
+  .status.pending {
+    color: #ff5252;
+  }
+
+  .status.active {
+    color: #00e676;
+  }
+
+  .actions {
+    margin-top: 10px;
+  }
+
+  .actions button {
+    margin-top: 8px;
+    background: linear-gradient(to right, #ff758c, #ff7eb3);
+    color: white;
+    font-size: 0.9em;
+  }
+
+  .actions button:last-child {
+    background: linear-gradient(to right, #00c6ff, #0072ff);
+  }
+
+  #qrModal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  #qrModal div {
+    background: #121212;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 15px;
+    padding: 25px;
+    text-align: center;
+    color: #fff;
+    width: 90%;
+    max-width: 320px;
+  }
+
+  #qrModal img {
+    margin: 15px 0;
+    border-radius: 10px;
+    border: 1px solid #555;
+  }
+
+  @media (max-width: 600px) {
+    h1 {
+      font-size: 1.5em;
+    }
+
+    .form, .search, .member-card {
+      padding: 15px;
+    }
+
+    button {
+      font-size: 1em;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>Fit Zone - Gym Member Manager</h1>
+
+  <div class="form">
+    <input type="text" id="name" placeholder="Member Name" required>
+    <input type="tel" id="mobile" placeholder="Mobile Number" required>
+    <input type="number" id="amount" placeholder="Amount to Pay" required>
+    <input type="number" id="duration" placeholder="Months (e.g. 1)" required>
+    <input type="date" id="startDate" required>
+    <button onclick="handleNewMember('cash')">Add Member (Cash)</button>
+    <button onclick="handleNewMember('upi')">Add Member (UPI)</button>
+  </div>
+
+  <div class="search">
+    <input type="text" id="search" placeholder="Search pending members..." oninput="renderMembers()">
+  </div>
+
+  <div id="members-list"></div>
+
+  <!-- QR Modal -->
+  <div id="qrModal">
+    <div>
+      <h3>Scan to Pay</h3>
+      <img src="" id="qrImage" width="200" height="200">
+      <br>
+      <button onclick="confirmUPIPayment()">Payment Done</button>
+      <button onclick="document.getElementById('qrModal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    let members = JSON.parse(localStorage.getItem("members")) || [];
+    let selectedMemberIndex = null;
+    let pendingNewMember = null;
+
+    function saveMembers() {
+      localStorage.setItem("members", JSON.stringify(members));
+    }
+
+    function handleNewMember(mode) {
+      const name = document.getElementById('name').value.trim();
+      const mobile = document.getElementById('mobile').value.trim();
+      const amount = document.getElementById('amount').value.trim();
+      const duration = parseInt(document.getElementById('duration').value);
+      const startDateStr = document.getElementById('startDate').value;
+
+      if (!name || !mobile || !amount || !duration || !startDateStr) {
+        alert("Please fill all fields.");
+        return;
+      }
+
+      const startDate = new Date(startDateStr);
+      const expiry = new Date(startDate);
+      expiry.setMonth(expiry.getMonth() + duration);
+
+      const memberData = {
+        name,
+        mobile,
+        amount,
+        date: startDateStr,
+        expiry: expiry.toISOString(),
+        status: "active"
+      };
+
+      if (mode === 'cash') {
+        members.push(memberData);
+        saveMembers();
+        clearForm();
+        renderMembers();
+      } else {
+        pendingNewMember = memberData;
+        const upiId = "fmansuri5@okhdfcbank";
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=${upiId}&pn=FitZone&am=${amount}`;
+        document.getElementById('qrImage').src = qrUrl;
+        document.getElementById('qrModal').style.display = 'flex';
+      }
+    }
+
+    function confirmUPIPayment() {
+      if (pendingNewMember) {
+        members.push(pendingNewMember);
+        saveMembers();
+        pendingNewMember = null;
+        clearForm();
+        renderMembers();
+        document.getElementById('qrModal').style.display = 'none';
+      }
+    }
+
+    function clearForm() {
+      document.getElementById('name').value = '';
+      document.getElementById('mobile').value = '';
+      document.getElementById('amount').value = '';
+      document.getElementById('duration').value = '';
+      document.getElementById('startDate').value = '';
+    }
+
+    function deleteMember(index) {
+      if (confirm("Delete this member?")) {
+        members.splice(index, 1);
+        saveMembers();
+        renderMembers();
+      }
+    }
+
+    function renderMembers() {
+      const list = document.getElementById('members-list');
+      const search = document.getElementById('search').value.toLowerCase();
+      list.innerHTML = '';
+
+      const today = new Date();
+      members.forEach((m, i) => {
+        const isPending = new Date(m.expiry) < today;
+        if (search && (!isPending || !m.name.toLowerCase().includes(search))) return;
+
+        const cardClass = isPending ? 'member-card pending' : 'member-card';
+        const statusClass = isPending ? 'status pending' : 'status active';
+
+        list.innerHTML += `
+          <div class="${cardClass}">
+            <p><strong>Name:</strong> ${m.name}</p>
+            <p><strong>Mobile:</strong> ${m.mobile}</p>
+            <p><strong>Amount:</strong> ₹${m.amount}</p>
+            <p><strong>Start Date:</strong> ${m.date}</p>
+            <p><strong>Status:</strong> <span class="${statusClass}">${isPending ? 'Pending' : 'Active'}</span></p>
+            <div class="actions">
+              <button onclick="deleteMember(${i})">Delete</button>
+              ${isPending ? `
+                <button onclick="handleRenewal(${i}, 'cash')">Renew (Cash)</button>
+                <button onclick="handleRenewal(${i}, 'upi')">Renew (UPI)</button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function handleRenewal(index, mode) {
+      selectedMemberIndex = index;
+      const member = members[index];
+      if (mode === 'cash') {
+        renewMembership(index);
+      } else {
+        const upiId = "fmansuri5@okhdfcbank";
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=${upiId}&pn=FitZone&am=${member.amount}`;
+        document.getElementById('qrImage').src = qrUrl;
+        document.getElementById('qrModal').style.display = 'flex';
+      }
+    }
+
+    function renewMembership(index) {
+      const today = new Date();
+      const expiry = new Date();
+      expiry.setMonth(expiry.getMonth() + 1);
+      members[index].date = today.toISOString().split('T')[0];
+      members[index].expiry = expiry.toISOString();
+      members[index].status = "active";
+      saveMembers();
+      renderMembers();
+    }
+
+    // Load members
+    renderMembers();
+  </script>
+</body>
+</html>
